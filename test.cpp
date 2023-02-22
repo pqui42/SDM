@@ -3,7 +3,66 @@
 #include <typeindex>
 #include <cstddef>
 #include <cstdlib>
+#include <limits>
+#include <memory>
+#include <iostream>
 
+
+template <typename T>
+class Test {
+public:
+  void CreateMemoryPool(size_t pool_size){
+    if(is_pool_created_) {
+      std::cerr << "Pool already created\n";
+      std::abort();
+    } else {
+      type_size_ = sizeof(T);
+      pool_size_ = pool_size;
+      // crate pool 
+      is_pool_created_ = true;
+    }
+  }
+
+  static Test & Get() {
+    static Test instance;
+    return instance;
+  }
+
+  size_t GetSizeOfType() {
+   PoolIsCreated();
+    return type_size_;
+  }
+
+  size_t GetSizeOfPool() {
+    PoolIsCreated();
+    return pool_size_;
+  }
+private:
+  void PoolIsCreated() {
+      if(!is_pool_created_) {
+      std::cerr << "Pool not already created\n";
+      std::abort();
+    }
+  }
+  Test() = default;
+  ~Test() = default;
+  Test(const Test&)= delete;
+  Test& operator=(const Test&)= delete;
+  size_t pool_size_;
+  size_t type_size_;
+  bool is_pool_created_ = false;
+};
+
+int main() {
+  Test<int>::Get().CreateMemoryPool(100);
+  auto typeSize = Test<int>::Get().GetSizeOfType();
+  auto poolSize = Test<int>::Get().GetSizeOfPool();
+
+  assert(typeSize == sizeof(int));
+  assert(poolSize == 100);
+}
+
+#if 0
 // A block constists no_solts_per_block_
 struct Slot {
   // A slots in a block contains the address of the next free slot
@@ -194,6 +253,10 @@ public :
 
 int main() {
 
-  PoolAllocator<int>  p(100);
+  static PoolAllocator<int>  p(100);
+
+  auto p = p.Allocate(sizeof(int));
 
 }
+
+#endif
