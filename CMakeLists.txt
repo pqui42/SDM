@@ -10,7 +10,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 
  
 add_library(LIB_NAME SHARED sdm.cpp)
-set_property(TARGET LIB_NAME PROPERTY CXX_STANDARD 11)
+set_property(TARGET LIB_NAME PROPERTY CXX_STANDARD 14)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
