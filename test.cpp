@@ -15,12 +15,50 @@
 /// @tparam T 
 /// @return returns the demangled name of T
 template <class T>
-std::string_view GetTypeName() {
-    return std::string_view(abi::__cxa_demangle(typeid(T).name(), nullptr,
-                                           nullptr, nullptr));
+std::string GetTypeName() {
+    auto m_name = typeid(T).name();
+    size_t buff_size = sizeof(m_name);
+    auto buff = reinterpret_cast<char*>(::operator new(buff_size));
+    int stat = 0;
+    if(buff) {
+        buff = abi::__cxa_demangle(m_name, buff, &buff_size, &stat);
+    } else {
+        std::abort();
+    }
+    std::string ret(buff);
+    ::operator delete(buff);
+    return ret;
 }
 
-/// @brief PoolAllocator 
+class Memory {
+
+    public: 
+        static Memory & Get(){
+            static Memory instance;
+            return instance;
+        }
+
+        void AllocAllow() {
+            mem_freez_= false;
+        }
+
+        void AllocProhibit() {
+            mem_freez_ = true;
+        }
+
+        bool IsAllocAllowed() {
+            return mem_freez_;
+        }
+
+    private:
+        Memory() : mem_freez_{false} {}
+        ~Memory() {};
+
+        bool mem_freez_;
+
+};
+
+/// @brief BumpAlo 
 ///         
 /// @details
 ///  
@@ -30,13 +68,12 @@ std::string_view GetTypeName() {
 ///               Note: the last slot contains nullptr to mark the end of the pool.
 ///  
 ///        This allocator can only hand out one slot or all slots per allocation.
-///        Only one slot or all slots can be handed back to the pool per
-///        deallocation.
+///        Only one slot can be handed back to the pool per deallocation.
 ///                
 ///        Rationale: This allocator is to be used in conjunction with 
-///                   std::map and std::vector. These containers serve the usecase 
-///                   to work with a per element approach (see interface of std::map
-///                   and std::vector). If this allocation strategie fits into your
+///                   std::map. This containers serve the usecase to work with a 
+////                  per element approach (see modifiers interface of std::map). 
+///                   If this allocation strategie fits into your
 ///                   objects allocation demangs you are free to use it.  
 /// 
 ///                
@@ -46,112 +83,104 @@ std::string_view GetTypeName() {
 /// 
 /// @attention 
 /// 
-///        Only one PoolAllocator<T> instance will exsit in your programm and once 
+///        Only one BumpAlo<T> instance will exsit in your programm and once 
 ///        createatd it will exsit during the entire programms duration. 
 ///
 /// @tparam T 
 template <typename T>
-class PoolAllocator {
+class BumpAlo {
+
     public:
-    /// @brief Getter to the instance of PoolAllocator<T>
+    /// @brief Getter to the instance of BumpAlo<T>
     /// @attention never assign the returned instance to a variable. 
-    /// @return never use the return statement use PoolAllocator<T>::Get().Function() instead
-    static PoolAllocator & Get() {
-        static PoolAllocator instance;
+    /// @return use BumpAlo<T>::Get().Function() instead
+    static BumpAlo & Get() {
+        static BumpAlo instance;
         return instance;
     }
 
-    /// @brief Creates a memory pool
+    /// @brief Adds a new block of memory for the pool of T
     /// @details   The global new operator is used to request memory for the pool.
-    ///            no_slots slots are created.
-    /// @attention Recreation of the memory pool will abort your programm
+    ///            no_slots slots are added to the pool for T.
     /// @param no_slots 
-    void CreateMemoryPool(size_t no_slots) {
+    void AddMemory(size_t no_slots = 1) {
 
-        std::cout << __FUNCTION__ << " for type " << GetTypeName<T>() << std::endl;
-        
-        if(is_pool_created_) {
-            std::cout << "Pool for "<< GetTypeName<T>() << " already created" << std::endl;
-            std::abort();
-        } else {
-            no_slots_ = no_slots;
-            Slot * pool_begin = CreateMemoryPoolImpl(no_slots);
-            alloc_ptr_ = pool_begin;
-            pool_begin_ = pool_begin;
-        }
+            Slot * block_begin = AddMemoryImpl(no_slots);
+            if(no_blocks_== 0) {
+                alloc_ptr_ = block_begin;
+            }
 
-        std::cout << __FUNCTION__ << " for type " << GetTypeName<T>() << " done" << std::endl;
+            if(alloc_ptr_ == nullptr) {
+                alloc_ptr_ = block_begin;
+            }
+
+            ++no_blocks_;
+            no_slots_ += no_slots;
+            block_size_ = no_slots;
+            free_ptr_.push_back(block_begin);
     }
 
-    /// @brief Releases the memory pool
-    /// @details Uses the global delete operator to release the memory 
-    ///          used for the pool
-    /// @attention calling this function before CreateMemoryPool or twice in a row
-    ///            will abort your programm 
-    void ReleaseMemoryPool() {
-        std::cout << __FUNCTION__ << " for type " << GetTypeName<T>() << std::endl;
-        if(pool_begin_ == nullptr) {
-            std::cout << "Pool for "<< GetTypeName<T>() << " already created" << std::endl;
-            std::abort();
-        }
-        ::operator delete(static_cast<void *>(pool_begin_));
-        pool_begin_ = nullptr;
-        no_slots_ = 0;
-        is_pool_created_ = false;
-        alloc_ptr_ = nullptr;
-        slot_index_ = 0; 
-        std::cout << __FUNCTION__ << " for type " << GetTypeName<T>() << " done" << std::endl;
-    }
-
-    /// @brief Hands out one slot or all slots per allocation
-    /// @details If you use this function otherwise, your program will be aborted
+      
+    /// @brief Hands out one slot per allocation
+    /// @details If this function is used otherwise, your program will be aborted
     /// @param no_slots 
     /// @return pointer to free slot  
-    void *Allocate(size_t no_slots) {
-        IsPoolCreatedCheck();
-        return AllocateImpl(no_slots);
+    T *Allocate(size_t no_slots = 1) {
+
+        assert(no_slots == 1);
+        if (alloc_ptr_ == nullptr) {
+            block_size_ = 1;
+            alloc_ptr_ = AddMemoryImpl(block_size_);
+            ++no_blocks_;
+            no_slots_ += no_slots;
+            free_ptr_.push_back(alloc_ptr_);
+        } 
+        Slot *free_slot = alloc_ptr_;
+        alloc_ptr_ = alloc_ptr_->next;
+
+        return reinterpret_cast<T*>(free_slot);
     }
 
-    /// @brief Hands back one or all slots 
-    /// @details If you use this function otherwise, your program will be aborted
+    /// @brief Hands back one slot
+    /// @details If this function is used otherwise, your program will be aborted
     /// @param slot 
     /// @param no_slots 
-    void Deallocate(void *slot, size_t no_slots) {
-        IsPoolCreatedCheck();
-        DeallocateImpl(slot, no_slots);
+    void Deallocate(void *slot, size_t no_slots = 1) {
+        assert(no_slots == 1);
+        reinterpret_cast<Slot *>(slot)->next = alloc_ptr_;
+        alloc_ptr_ = reinterpret_cast<Slot *>(slot);
     }
 
-    /// @brief  IsPoolCreated
-    /// @return true if pool has been created, otherwise false 
-    bool IsPoolCreated() {
-        return is_pool_created_;
-    }
 
     /// @brief GetSizeOfType
     /// @return size of type
     size_t GetSizeOfType() {
-    IsPoolCreatedCheck();
         return sizeof(T);
     }
 
     /// @brief GetSizeOfPool
     /// @return number of slots in pool 
     size_t GetSizeOfPool() {
-        IsPoolCreatedCheck();
+
         return no_slots_;
     }
 
-private:
-    PoolAllocator() :  no_slots_{0}, is_pool_created_{false}, pool_begin_{nullptr}, alloc_ptr_{nullptr}, slot_index_{0} { 
-        std::cout << __FUNCTION__ << "<" << GetTypeName<T>() << ">" << std::endl;
-    }
-    ~PoolAllocator() {
-        std::cout << __FUNCTION__ << "<" << GetTypeName<T>() << ">" << std::endl;
-        assert(pool_begin_ == nullptr);
+    size_t GetNoOfBlocks() {
+        return no_blocks_;
     }
 
-    PoolAllocator(const PoolAllocator&)= delete;
-    PoolAllocator& operator=(const PoolAllocator&)= delete;
+private:
+    BumpAlo() :  no_slots_{0},  no_blocks_{0}, block_size_{1}, alloc_ptr_{nullptr}, block_end_{nullptr} { 
+        //std::cout << __FUNCTION__ << "<" << GetTypeName<T>() << ">" << std::endl;
+    }
+    ~BumpAlo() {
+        for(auto ptr : free_ptr_) {
+            ::operator delete(ptr);
+        } 
+    }
+
+    BumpAlo(const BumpAlo&)= delete;
+    BumpAlo& operator=(const BumpAlo&)= delete;
 
   
     // A slots in a block contains the address of the next free slot
@@ -160,132 +189,45 @@ private:
     };
 
     size_t no_slots_;
-    bool is_pool_created_;
-    Slot *pool_begin_;
+    size_t no_blocks_;
+    size_t block_size_;
     Slot *alloc_ptr_;
-    size_t slot_index_;
+    Slot *block_end_;
+    std::vector<void*> free_ptr_;
 
     static_assert(sizeof(T) >= sizeof(Slot));
 
-    void IsPoolCreatedCheck() {
-        if(!IsPoolCreated()) {
-            std::cout << "A memory pool for : " << GetTypeName<T>() << " does not exsit" << std::endl;
-        }
-    }
 
-    Slot * CreateMemoryPoolImpl(size_t pool_size) {
-        std::cout << __FUNCTION__ << std::endl;
-        // The first slot of the pool
-        Slot *pool_begin = reinterpret_cast<Slot *>(::operator new(pool_size*sizeof(T)));
-        // Once the pool is allocated slots are ch
-        Slot *slot = pool_begin;
-        std::cout << "slot " << 1 << " @" << slot << std::endl;
+    Slot * AddMemoryImpl(size_t block_size) {
+        assert(block_size_>=1);
+        // The first slot of the block
+        Slot *block_begin = reinterpret_cast<Slot *>(::operator new(block_size*sizeof(T)));
+        Slot *slot = block_begin;
 
-        for (size_t i = 0; i < pool_size - 1; ++i) {
+        for (size_t i = 0; i < block_size - 1; ++i) {
             slot->next =
                 reinterpret_cast<Slot *>(reinterpret_cast<char *>(slot) + sizeof(T));
             slot = slot->next;
-            std::cout << "slot " << i+2 << " @" << slot << std::endl;
+           
         }
 
-        slot->next = nullptr; // end of pool
-        is_pool_created_ = true;
-        std::cout << __FUNCTION__ << " Memory pool is created" << std::endl;
-        return pool_begin;
+        slot->next = nullptr;
+
+        if(alloc_ptr_ != nullptr) {
+            block_end_->next =  reinterpret_cast<Slot *>(block_begin);
+        }
+
+        block_end_ = slot;
+
+        return block_begin;
     }
 
-    void *AllocateImpl(size_t no_slots) {
-
-        assert(no_slots == 1 || no_slots == no_slots_);
-
-        if (alloc_ptr_ == nullptr) {
-            std::cout << "No free slot in pool" << std::endl;;
-            std::abort();
-        }
-                
-        // The return value is the current position of
-        // the allocation pointer:
-        Slot *freeSlot = alloc_ptr_;
-        std::cout << "freeSlot @" << static_cast<void*>(freeSlot) << std::endl;
-        
-        // Advance (bump) the allocation pointer to the next free slot.
-        // When no slots left, the `alloc_ptr_` will be set to `nullptr`
-        std::cout << __FUNCTION__ << " no_slots : " << no_slots << std::endl;
-        std::cout << __FUNCTION__ << " slot_index_ + no_slots : " << slot_index_ + no_slots  << std::endl; 
-        if(slot_index_ + no_slots-1 < no_slots_)
-        {
-            alloc_ptr_ = (alloc_ptr_+no_slots-1)->next;
-            std::cout << __FUNCTION__ << " alloc_ptr_ : " << alloc_ptr_ << std::endl;
-        } else {
-            std::cout << "Not enought slots left in pool" << std::endl;
-            std::abort();
-        }
-        
-        slot_index_ +=no_slots;
-        std::cout << __FUNCTION__ << " slot_index_ : " <<  slot_index_ << std::endl;
-
-        return freeSlot;
-    }
-
-    void DeallocateImpl(void *slot, size_t no_slots) {
-        std::cout << __FUNCTION__ << " for type " << GetTypeName<T>() << std::endl;
-        std::cout << __FUNCTION__ << " no_slots : " << no_slots << std::endl; 
-        assert(slot != nullptr);
-
-        if(pool_begin_ != nullptr) {
-
-            assert(no_slots == 1 || no_slots == no_slots_);
-        
-            std::cout << __FUNCTION__ << " alloc_ptr_ : " << alloc_ptr_ << std::endl;
-            Slot * tmp_slot = reinterpret_cast<Slot *>(slot);
-            if(no_slots-1 >0) {
-                std::cout << tmp_slot << std::endl;
-                for (size_t i = 0; i < no_slots-1; i++)
-                {
-                tmp_slot->next = reinterpret_cast<Slot *>(reinterpret_cast<char *>(tmp_slot) + sizeof(T));
-                tmp_slot = tmp_slot->next;
-                std::cout << tmp_slot << std::endl;;
-                }
-            } 
-            
-            reinterpret_cast<Slot *>(tmp_slot)->next = alloc_ptr_;
-
-            alloc_ptr_ = reinterpret_cast<Slot *>(slot);
-            std::cout << __FUNCTION__ << " alloc_ptr_ : " << alloc_ptr_ << std::endl;
-            std::cout << __FUNCTION__ << " for type " << GetTypeName<T>() << "done" << std::endl;
-        } else {
-            std::cout << __FUNCTION__ << " poll has been deallocated already" << std::endl;
-        }
-    }
         
 };
-
-
-#if 0
-struct Object {
- 
-  // Object data, 16 bytes:
- 
-  uint64_t data[2];
- 
-  // Declare out custom allocator for
-  // the `Object` structure:
- 
-  static void *operator new(size_t size) {
-    return PoolAllocator<Object>::Get().Allocate(size);
-  }
- 
-  static void operator delete(void *ptr, size_t size) {
-    return PoolAllocator<Object>::Get().Deallocate(ptr, size);
-  }
-};
-
-#endif
-
 
 template <class T>
 class Allocator
-{
+{   
     static_assert(!std::is_volatile<T>::value, "Allocator does not support volatile types");
     public:
         typedef size_t    size_type;
@@ -295,7 +237,6 @@ class Allocator
         typedef T&        reference;
         typedef const T&  const_reference;
         typedef T         value_type;
-
 
         typedef std::true_type propagate_on_container_move_assignment;
         typedef std::true_type is_always_equal;
@@ -309,14 +250,14 @@ class Allocator
     
         T* allocate(size_t no_slots) {    
             if(no_slots > std::allocator_traits<Allocator>::max_size(*this)) {
-                std::cout << "request not possible" << std::endl;
+                //std::cout << "request not possible" << std::endl;
                 std::abort();
             }
-            return static_cast<T*>(PoolAllocator<T>::Get().Allocate(no_slots));
+            return static_cast<T*>(BumpAlo<T>::Get().Allocate(no_slots));
         }
 
         void deallocate(T* p, size_t no_slots) noexcept {
-            PoolAllocator<T>::Get().Deallocate(p,no_slots);
+            BumpAlo<T>::Get().Deallocate(p,no_slots);
         }
 
         template <class U>
@@ -360,16 +301,14 @@ bool operator!=(const Allocator<T>&, const Allocator<U>&) noexcept {
     return false;
 }
 
-// how to make Unique Pools?
-
 struct ClassName
 {
     ClassName () { 
-        //PoolAllocator<ClassNameAllocatorInfoContainer>::Get().CreateMemoryPool(10); // how make pools unique for a type? 
+        //BumpAlo<ClassNameAllocatorInfoContainer>::Get().AddMemory(10); // how make pools unique for a type? 
         //v.reserve(pool_size);
     }
     ~ClassName () {
-         //PoolAllocator<ClassNameAllocatorInfoContainer>::Get().ReleaseMemoryPool();
+         //BumpAlo<ClassNameAllocatorInfoContainer>::Get().ReleaseMemoryPool();
     } 
     struct ClassNameAllocatorInfoContainer
     {
@@ -379,71 +318,78 @@ struct ClassName
     //std::vector<ClassNameAllocatorInfoContainer, Allocator<ClassNameAllocatorInfoContainer>> v;
     size_t pool_size = 10; 
 };
-    
+
 
 int main() {
-    using vec = std::vector<double, Allocator<double>>;  
-    size_t no_slots_double = 10;
-    PoolAllocator<double>::Get().CreateMemoryPool(no_slots_double); // how make pools unique for a type? 
-    // Making the class Part of the type ??
 
-    vec v;
-    //v.get_allocator().reserve(10);
-    v.reserve(no_slots_double); // <- required due to vectors allocation strategie
-    // the alternative would be to create a bigger pool then the vector would hold 
-    // additionally the pool allocator would require to search for a big enough free chunck of successive 
-    // free slots. 
-    for(int i = 0; i<10; i++) {
-      v.push_back(i);
-    }
+    bool typeCheck = std::string("bool") == GetTypeName<bool>();
+    assert(typeCheck);
 
-    for(int i = 0; i < 10; i++) {
-      assert(v[i] == static_cast<double>(i));
-    }
+    struct TestType1{
+        TestType1(uint64_t x) : x_{x} {}
+        uint64_t x_;
+    };
 
-    v.clear();
+    using ba1 = BumpAlo<TestType1>;
 
-    for(int i = 0; i<10; i++) {
-      v.push_back(i);
-    }
+    ba1::Get().AddMemory();
+    ba1::Get().AddMemory();
+    ba1::Get().AddMemory();
 
-    for(int i = 0; i < 10; i++) {
-      assert(v[i] == static_cast<double>(i));
-    }
+    assert(ba1::Get().GetSizeOfPool() == 3);
+    assert(ba1::Get().GetNoOfBlocks() == 3);
+
+    ba1::Get().Allocate();
+    ba1::Get().Allocate();
+    ba1::Get().Allocate();
+
+    assert(ba1::Get().GetSizeOfPool() == 3);
+    assert(ba1::Get().GetNoOfBlocks() == 3);
+
+    ba1::Get().Allocate();
+
+    assert(ba1::Get().GetSizeOfPool() == 4);
+    assert(ba1::Get().GetNoOfBlocks() == 4);
+
+    ba1::Get().AddMemory(2);
+    assert(ba1::Get().GetSizeOfPool() == 6);
+    assert(ba1::Get().GetNoOfBlocks() == 5);
+
+    auto p1 = ba1::Get().Allocate();
+    assert(ba1::Get().GetSizeOfPool() == 6);
+    assert(ba1::Get().GetNoOfBlocks() == 5);
+
+    auto p2 = ba1::Get().Allocate();
+    assert(ba1::Get().GetSizeOfPool() == 6);
+    assert(ba1::Get().GetNoOfBlocks() == 5);
+
+    ::new ((void*)p1) TestType1(1);
+    ::new ((void*)p2) TestType1(32);
+
+    assert(p1->x_ == 1);
+    assert(p2->x_ == 32);
 
 
-    v.clear();
-
-    for(int i = 5; i<10; i++) {
-      v.push_back(i);
-    }
-  
-    v.emplace(v.begin(), 4);
-    v.emplace(v.begin(), 3);
-    v.emplace(v.begin(), 2);
-    v.emplace(v.begin(), 1);
-    v.emplace(v.begin(), 0);
-
-    for(int i = 0; i<10; ++i) {
-        assert(i == static_cast<int>(v[i]));
-    }
-    PoolAllocator<double>::Get().ReleaseMemoryPool();
+    ba1::Get().Allocate();
+    assert(ba1::Get().GetSizeOfPool() == 7);
+    assert(ba1::Get().GetNoOfBlocks() == 6);
 
 
     using Key = uint64_t;
     using T = uint64_t;
     using Compare = std::less<Key>;
-    using map = std::map<Key, T, Compare, Allocator<std::pair<const Key, T>>>;
+    using Type = std::pair<const Key, T>;
 
-    using GCCInternalTypeForAMapElement = std::_Rb_tree_node<std::pair<const Key, T>>;
+    using GCCInternalTypeForAMapElement = std::_Rb_tree_node<Type>;
+
+    using Map = std::map<Key, T, Compare, Allocator<Type>>;
 
     const size_t no_slots_map = 5; 
-    PoolAllocator<std::_Rb_tree_node<std::pair<const Key, T>>>::Get().CreateMemoryPool(no_slots_map);
+    BumpAlo<GCCInternalTypeForAMapElement>::Get().AddMemory(no_slots_map);
     
-    map m;
+    Map m;
 
-    static_assert(std::is_same_v<map::node_type::key_type, Key>);
-    static_assert(std::is_same_v<map::node_type::mapped_type, T>);
+
     for (T i = 1; i <= no_slots_map; ++i)
     {
       m[i] = i*i;
@@ -452,8 +398,5 @@ int main() {
     for (const auto& n : m) {
         assert(n.first*n.first == n.second);
     }
-
-    PoolAllocator<GCCInternalTypeForAMapElement>::Get().ReleaseMemoryPool();
-
-    std::cout << "End of main" << std::endl;
 }
+  
