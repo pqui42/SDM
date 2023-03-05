@@ -1,23 +1,58 @@
 cmake_minimum_required(VERSION 3.0.0)
-project(SAFE_DYNAMIC_MEMORY VERSION 0.1.0)
 
-include(CTest)
-enable_testing()
+project(SAF_ALO VERSION 0.1.0)
 
-set(LIB_NAME "sdm")
+
+set(CMAKE_CXX_STANDARD 14)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
 
- 
-add_library(LIB_NAME SHARED sdm.cpp)
-set_property(TARGET LIB_NAME PROPERTY CXX_STANDARD 14)
 
-set(CPACK_PROJECT_NAME ${PROJECT_NAME})
-set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
-include(CPack)
+set(LIB_NAME "safalo")
+add_library(${LIB_NAME} SHARED safalo.cpp)
 
-add_executable(sdmtest test.cpp)
 
-add_test(sdmtest sdmtest COMMAND "--verbose")
+#### testing 
+enable_testing()
+find_package(GTest REQUIRED)
+include(GoogleTest)
 
-target_link_libraries(sdmtest LIB_NAME)
+
+set(TEST_NAME "test_typename")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
+target_link_libraries(${TEST_NAME} 
+                        GTest::gtest 
+                        GTest::gtest_main
+                        )
+add_test(${TEST_NAME} ${TEST_NAME})
+
+set(TEST_NAME "test_bumpalo")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALO)
+target_link_libraries(${TEST_NAME} 
+                        GTest::gtest 
+                        GTest::gtest_main
+                        )
+add_test(${TEST_NAME} ${TEST_NAME})
+
+set(TEST_NAME "test_bumpalo_with_map")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALO)
+target_link_libraries(${TEST_NAME} 
+                        GTest::gtest 
+                        GTest::gtest_main
+                        )
+add_test(${TEST_NAME} ${TEST_NAME})
+
+
+set(TEST_NAME "test_safalo_permit")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp safalo.cpp)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_SAFALO)
+add_test(${TEST_NAME} ${TEST_NAME})
+
+
+set(TEST_NAME "test_safalo_prohibit")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp safalo.cpp)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_SAFALO)
+add_test(${TEST_NAME} ${TEST_NAME})
+set_property(TEST  ${TEST_NAME} PROPERTY PASS_REGULAR_EXPRESSION "Allocations Prohibited")
