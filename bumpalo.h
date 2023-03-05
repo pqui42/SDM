@@ -101,9 +101,9 @@ class BumpAlo {
         Slot *free_slot = alloc_ptr_;
         alloc_ptr_ = alloc_ptr_->next;
                 
-        #ifdef DEBUG_BUMPALO
+#ifdef DEBUG_BUMPALO
             std::cout << __FUNCTION__ << "<" << type_name_<< "> \n      free_slot @" << free_slot << std::endl;
-        #endif
+#endif
 
         return reinterpret_cast<T*>(free_slot);
     }
@@ -121,9 +121,9 @@ class BumpAlo {
         reinterpret_cast<Slot *>(slot)->next = alloc_ptr_;
         alloc_ptr_ = reinterpret_cast<Slot *>(slot);
 
-        #ifdef DEBUG_BUMPALO
+#ifdef DEBUG_BUMPALO
             std::cout << __FUNCTION__ << "<" << type_name_<< "> \n      deleted @" << slot << std::endl;
-        #endif
+#endif
     }
 
 
@@ -148,20 +148,20 @@ class BumpAlo {
 private:
 #ifdef DEBUG_BUMPALO
     BumpAlo() :  no_slots_{0},  no_blocks_{0}, block_size_{1}, alloc_ptr_{nullptr}, block_end_{nullptr}, type_name_{GetTypeName<T>()} { 
-#else
-     BumpAlo() :  no_slots_{0},  no_blocks_{0}, block_size_{1}, alloc_ptr_{nullptr}, block_end_{nullptr} { 
-#endif
-#ifdef DEBUG_BUMPALO
-            std::cout << __FUNCTION__ << "<" << type_name_<< ">" << std::endl;
-#endif
+           std::cout << __FUNCTION__ << "<" << type_name_<< ">" << std::endl;
     }
+#else
+     BumpAlo() :  no_slots_{0},  no_blocks_{0}, block_size_{1}, alloc_ptr_{nullptr}, block_end_{nullptr} {}
+#endif
+
     ~BumpAlo() {
-        #ifdef DEBUG_BUMPALO
-            std::cout << __FUNCTION__ << "<" << type_name_<< ">" << std::endl;
-        #endif
         for(auto ptr : ptr_to_free_) {
             ::operator delete(ptr);
-        } 
+        }
+
+#ifdef DEBUG_BUMPALO
+        std::cout << __FUNCTION__ << "<" << type_name_<< ">" << std::endl;
+#endif 
     }
 
     BumpAlo(const BumpAlo&)= delete;
@@ -179,9 +179,9 @@ private:
     size_t block_size_;
     Slot *alloc_ptr_;
     Slot *block_end_;
-    #ifdef DEBUG_BUMPALO
+#ifdef DEBUG_BUMPALO
     const std::string type_name_;
-    #endif
+#endif
     std::vector<void*> ptr_to_free_;
 
     static_assert(sizeof(T) >= 8, "Smaller types are not supported");
