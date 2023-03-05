@@ -28,7 +28,7 @@ add_test(${TEST_NAME} ${TEST_NAME})
 
 set(TEST_NAME "test_bumpalo")
 add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
-target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALO)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALO DEBUG_BUMPALOBASE)
 target_link_libraries(${TEST_NAME} 
                         GTest::gtest 
                         GTest::gtest_main
@@ -37,7 +37,35 @@ add_test(${TEST_NAME} ${TEST_NAME})
 
 set(TEST_NAME "test_bumpalo_with_map")
 add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
-target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALO)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALO DEBUG_BUMPALOBASE)
+target_link_libraries(${TEST_NAME} 
+                        GTest::gtest 
+                        GTest::gtest_main
+                        )
+add_test(${TEST_NAME} ${TEST_NAME})
+
+
+set(TEST_NAME "test_bumpalobase")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALOBASE)
+target_link_libraries(${TEST_NAME} 
+                        GTest::gtest 
+                        GTest::gtest_main
+                        )
+add_test(${TEST_NAME} ${TEST_NAME})
+
+set(TEST_NAME "test_bumpalobase_exhausted")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALOBASE)
+target_link_libraries(${TEST_NAME} 
+                        GTest::gtest 
+                        GTest::gtest_main
+                        )
+add_test(${TEST_NAME} ${TEST_NAME})
+
+set(TEST_NAME "test_bumpalobase_pool_not_created_yet")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
+target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_BUMPALOBASE)
 target_link_libraries(${TEST_NAME} 
                         GTest::gtest 
                         GTest::gtest_main

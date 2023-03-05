@@ -1,6 +1,6 @@
 #include <cassert>
 #include "typename.h"
-#include "palo.h"
+#include "bumpalo.h"
 
 int main() {
 
