@@ -57,6 +57,7 @@ class PAlo {
         size_type max_size() const noexcept {              
             return size_type(~0) / sizeof(T);
         }
+        
         template<class U, class... Args>
         void construct(U* p, Args&&... args){         
             ::new (static_cast<void*>(p)) U(std::forward<Args>(args)...);

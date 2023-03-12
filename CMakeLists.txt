@@ -84,3 +84,8 @@ add_executable(${TEST_NAME} ${TEST_NAME}.cpp safalo.cpp)
 target_compile_definitions(${TEST_NAME} PRIVATE DEBUG_SAFALO)
 add_test(${TEST_NAME} ${TEST_NAME})
 set_property(TEST  ${TEST_NAME} PROPERTY PASS_REGULAR_EXPRESSION "Allocations Prohibited")
+
+
+set(TEST_NAME "test_dynamicbuffer")
+add_executable(${TEST_NAME} ${TEST_NAME}.cpp)
+add_test(${TEST_NAME} ${TEST_NAME})

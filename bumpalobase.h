@@ -4,7 +4,7 @@
 #include <iostream>
 #include <vector>
 #include "typename.h"
-
+#include "dynamicbuffer.h"
 
 template <class T>
 class BumpAloBase {
@@ -145,6 +145,7 @@ private:
     size_t block_size_;
     Slot *alloc_ptr_;
     Slot *block_end_;
+    DynamicBuffer<Slot> dm_;
 #ifdef DEBUG_BUMPALOBASE
     const std::string type_name_;
 #endif
@@ -158,6 +159,22 @@ private:
             std::cerr << __FUNCTION__ << " block_size : " << block_size << " is not possible\n";
             std::abort();
         }
+
+        auto last_index = dm_.GetLast();        
+
+        dm_.Add(block_size);
+
+        for (size_t i = last_index; i < dm_.GetCapacity(); ++i) {
+            dm_[i].next = &dm_[i]+ sizeof(T);  
+        }
+
+        dm_[dm_.GetLast()].next = nullptr;
+
+
+        for (size_t i = 0; i < dm_.GetCapacity(); ++i) {
+            std::cout << i << " " <<dm_[i].next << std::endl;
+        }
+
 
         // request memeory from OS
         Slot *block_begin = reinterpret_cast<Slot *>(::operator new(block_size*sizeof(T)));
