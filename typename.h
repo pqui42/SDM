@@ -1,4 +1,3 @@
-
 #ifndef TYPE_NAME_H
 #define TYPE_NAME_H
 
